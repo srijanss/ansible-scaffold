@@ -1,0 +1,399 @@
+- name: Create ansible playbook
+  hosts: localhost
+  vars:
+    ansible_dir: "ansible-playbook"
+
+  tasks:
+    - name: Create ansible directory
+      file:
+        path: "{{ ansible_dir }}"
+        state: directory
+
+    - name: Create group_vars directories
+      file:
+        path: "{{ ansible_dir }}/group_vars"
+        state: directory
+
+    - name: Create staging.yaml inside group_vars
+      copy:
+        dest: "{{ ansible_dir }}/group_vars/staging.yaml"
+        content: |
+          {% raw -%}
+          helm_chart_version: "{{chart_version}}"
+          helm_chart_name: "{{ app_name }}"
+          helm_release_name: staging
+          helm_app_domain: "YOUR_APP_DOMAIN_NAME" 
+          helm_namespace: "{{ app_name }}-staging"
+          helm_chart_dir: "{{ charts_dir | default('helm_charts') }}" 
+          helm_chart_path: "{{helm_chart_dir}}/{{helm_chart_name}}"
+          helm_values_file: "/tmp/{{helm_release_name}}-values.yaml"
+          helm_azure_secrets_file: "{{helm_chart_path}}/azure-secrets.staging.yaml"
+          helm_manifest_file: "/tmp/{{helm_release_name}}-manifest.yaml"
+          helm_tls_secret_name: "{{ helm_app_domain | replace('.', '-') }}-tls"
+          helm_key_vault_name: "YOUR_KEY_VAULT_NAME"
+          helm_values:
+            replicaCount: 2
+            image:
+              repository: REPOSITORY_NAME
+              pullPolicy: IfNotPresent
+              tag: VERSION_NUMBER
+            podSecurityContext:
+              runAsUser: 1000
+              runAsGroup: 2000
+              fsGroup: 2000
+            securityContext:
+              capabilities:
+                drop:
+                  - ALL
+              readOnlyRootFilesystem: true
+              runAsNonRoot: true
+              runAsUser: 1000
+            livenessProbe:
+              initialDelaySeconds: 5
+              periodSeconds: 10
+            readinessProbe:
+              initialDelaySeconds: 5
+              periodSeconds: 10
+            resources:
+              limits:
+                cpu: "1"
+                memory: 512Mi
+              requests:
+                cpu: 1m
+                memory: 128Mi
+            service:
+              type: ClusterIP
+              port: 80
+              targetPort: 8000
+              name: gunicorn
+            ingress:
+              enabled: true
+              className: nginx
+              annotations:
+                nginx.ingress.kubernetes.io/proxy-connect-timeout: "300"
+                nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+                cert-manager.io/cluster-issuer: letsencrypt-prod
+                nginx.ingress.kubernetes.io/server-alias: "www.{{helm_app_domain}}"
+              hosts:
+                - host: "{{helm_app_domain}}"
+                  paths:
+                    - path: /
+                      pathType: Prefix
+              tls:
+                - secretName: "{{helm_tls_secret_name}}"
+                  hosts:
+                    - "{{helm_app_domain}}"
+                    - www.{{helm_app_domain}}
+            azureKeyVault:
+              name: "{{ helm_key_vault_name }}"
+              clientId: YOUR_CLIENT_ID
+              tenantId: YOUR_TENANT_ID
+              secretName: kv-secrets
+              volumeName: secrets-store-inline
+              mountPath: /mnt/secrets-store
+              secretProviderClassName: "{{helm_chart_name}}-kv-sync"
+            appConfig:
+              DEBUG: "False"
+              DJANGO_LOGLEVEL: "info"
+              DEFAULT_CHARSET: "UTF-8"
+              ALLOWED_HOSTS: ".{{helm_app_domain}}"
+              CSRF_TRUSTED_ORIGINS: "https://*.{{helm_app_domain}}"
+            {% endraw %}
+
+    - name: Create inventories directories
+      file:
+        path: "{{ ansible_dir }}/inventories/{{ item }}"
+        state: directory
+        recurse: yes
+      loop:
+        - staging
+        - production
+
+    - name: Create staging hosts.yaml file inside inventories
+      copy:
+        dest: "{{ ansible_dir }}/inventories/staging/hosts.yaml"
+        content: |
+          {% raw -%}
+          all:
+            children:
+              staging:
+                hosts:
+                  staging_cluster:
+                    ansible_connection: local
+                    kube_context: "YOUR_STAGING_CLUSTER_NAME"
+          {% endraw %}
+
+    - name: Create production hosts.yaml file inside inventories
+      copy:
+        dest: "{{ ansible_dir }}/inventories/production/hosts.yaml"
+        content: |
+          {% raw -%}
+          all:
+            children:
+              production:
+                hosts:
+                  production_cluster:
+                    ansible_connection: local
+                    kube_context: "YOUR_PRODUCTION_CLUSTER_NAME"
+          {% endraw %}
+
+    - name: Create roles directories
+      file:
+        path: "{{ ansible_dir }}/{{ item }}"
+        state: directory
+        recurse: yes
+      loop:
+        - roles/build/tasks
+        - roles/deploy/tasks
+        - roles/deploy/templates
+
+    - name: Create build role
+      copy:
+        dest: "{{ ansible_dir }}/roles/build/tasks/main.yaml"
+        content: |
+          {% raw -%}
+          - name: Ensure Docker is installed
+            command: docker --version
+            register: docker_check
+            failed_when: docker_check.rc != 0
+
+          - name: Update repository name and tag in docker-compose.yaml
+            shell: >
+              yq eval '.services.app.image = "{{ docker_image_name }}"' -i {{ docker_compose_file_path }}
+            when: docker_image_name is defined
+            register: docker_compose_update
+            args:
+              chdir: "./"
+            failed_when: docker_compose_update.rc != 0
+            changed_when: docker_compose_update.rc == 0
+
+          - name: Build Docker image using docker compose build
+            ansible.builtin.command: >
+              docker compose -f {{ docker_compose_file_path }} build
+            args:
+              chdir: "./"
+            register: docker_build
+            when: docker_compose_update is changed
+            failed_when: docker_build.rc != 0
+
+          - name: Login to Azure Container Registry
+            command: >
+              az acr login --name {{ docker_container_registry_name }}
+            args:
+              chdir: "./"
+            when: docker_build is changed and build_action == "build_and_push"
+            register: acr_login
+            failed_when: acr_login.rc != 0
+            changed_when: acr_login.rc == 0
+
+          - name: Push Docker image to Azure Container Registry using docker compose
+            ansible.builtin.command: >
+              docker compose -f {{ docker_compose_file_path }} push
+            args:
+              chdir: "./"
+            register: docker_push
+            when: acr_login is changed and build_action == "build_and_push"
+            failed_when: docker_push.rc != 0
+            changed_when: docker_push.rc == 0
+          {% endraw %}
+
+    - name: Create deploy role
+      copy:
+        dest: "{{ ansible_dir }}/roles/deploy/tasks/main.yaml"
+        content: |
+          {% raw -%}
+          - name: Ensure kubectl is installed
+            command: kubectl version --client
+            register: kubectl_check
+            failed_when: kubectl_check.rc != 0
+            changed_when: kubectl_check.rc == 0
+
+          - name: Ensure active kube context is set and is equal to {{ kube_context }}
+            command: kubectl config current-context
+            register: kube_context_check
+            changed_when: kube_context_check.stdout != kube_context
+            when: kubectl_check is changed
+
+          - name: Use kubectl to set the context to {{ kube_context }}
+            command: kubectl config use-context {{ kube_context }}
+            register: kubectl_context_set
+            failed_when: kubectl_context_set.rc != 0
+            changed_when: kubectl_context_set.rc == 0
+            when: kube_context_check is changed
+
+          - name: Ensure Helm is installed
+            command: helm version
+            register: helm_check
+            failed_when: helm_check.rc != 0
+            changed_when: helm_check.rc == 0
+
+          - name: Create Helm charts directory
+            file:
+              path: ./{{ helm_chart_dir }}
+              state: directory
+            when: helm_check is changed and helm_action == "create"
+            register: helm_charts_dir
+
+          - name: Create Helm chart scaffold (like `helm create`)
+            command: helm create {{helm_chart_path}}
+            register: helm_create
+            args:
+              chdir: "./"
+            when: helm_check is changed and helm_action == "create"
+
+          - name: Update Chart.yaml
+            shell: >
+              yq eval '.version = "{{ helm_chart_version }}"' -i {{ helm_chart_path }}/Chart.yaml &&
+              yq eval '.name = "{{ helm_chart_name }}"' -i {{ helm_chart_path }}/Chart.yaml &&
+              yq eval '.appVersion = "{{ helm_values.image.tag }}"' -i {{ helm_chart_path }}/Chart.yaml
+            when: helm_check is changed and helm_action in ["template", "install"]
+            register: helm_chart_update
+            changed_when: helm_chart_update.rc == 0
+            failed_when: helm_chart_update.rc != 0
+
+          - name: Download secrets from Azure Key Vault
+            shell: >
+              az keyvault secret list --vault-name {{helm_values.azureKeyVault.name}} --query "[].name" -o tsv > /tmp/secrets.txt
+            when: helm_chart_update is changed and helm_action in ["template", "install"]
+            register: download_azure_secrets
+            changed_when: download_azure_secrets.rc == 0
+            failed_when: download_azure_secrets.rc != 0
+
+          - name: Read secrets from file
+            slurp:
+              src: /tmp/secrets.txt
+            register: secret_file
+            when: download_azure_secrets is changed and helm_action in ["template", "install"]
+
+          - name: Convert secrets content to list
+            set_fact:
+              secret_keys: "{{ secret_file.content | b64decode | split(\n) | select('match', '.+') | list }}"
+            when: helm_action in ["template", "install"]
+
+          - name: Render values.yaml
+            template:
+              src: values.yaml.j2
+              dest: "{{helm_values_file}}"
+            when: helm_action in ["template", "install"]
+
+          - name: Generate manifest.yaml using helm template
+            ansible.builtin.command: >
+              helm template {{ helm_release_name }}
+              {{ helm_chart_path }}
+              --namespace {{ helm_namespace }}
+              -f {{ helm_values_file }}
+            register: rendered_output
+            when: helm_action == "template"
+
+          - name: Write rendered manifest to file
+            copy:
+              content: "{{ rendered_output.stdout }}"
+              dest: "{{helm_manifest_file}}"
+            when: helm_action == "template"
+
+          - name: Install or upgrade Helm release
+            ansible.builtin.command: >
+              helm upgrade --install {{ helm_release_name }}
+              {{ helm_chart_path }}
+              --namespace {{ helm_namespace }}
+              --create-namespace
+              -f {{ helm_values_file }}
+              -f {{ helm_azure_secrets_file }}
+            when: helm_action == "install"
+
+          - name: Uninstall Helm release
+            ansible.builtin.command: >
+              helm uninstall {{ helm_release_name }}
+              --namespace {{ helm_namespace }}
+            when: helm_action == "uninstall"
+
+          - name: Restart the deployment {{ helm_release_name }}-{{ helm_chart_name }}-deployment
+            ansible.builtin.command: >
+              kubectl rollout restart deployment {{ helm_release_name }}-{{ helm_chart_name }}-deployment
+              --namespace {{ helm_namespace }}
+            when: kubectl_check is changed and helm_action == "restart"
+          {% endraw %}
+
+    - name: Create deploy role template
+      copy:
+        dest: "{{ ansible_dir }}/roles/deploy/templates/values.yaml.j2"
+        content: |
+          {% raw -%}
+          namespace: {{ helm_namespace }}
+          replicaCount: {{ helm_values.replicaCount }}
+          image:
+            {{ helm_values.image | to_nice_yaml(indent=2) | indent(2) }}
+          imagePullSecrets: []
+          nameOverride: ""
+          fullnameOverride: ""
+          serviceAccount:
+            create: false
+            annotations: {}
+            name: ""
+          podAnnotations: {}
+          podSecurityContext:
+            {{ helm_values.podSecurityContext | to_nice_yaml(indent=2) | indent(2) }}
+          securityContext:
+            {{ helm_values.securityContext | to_nice_yaml(indent=2) | indent(2) }}
+          livenessProbe:
+            {{ helm_values.livenessProbe | to_nice_yaml(indent=2) | indent(2) }}
+          readinessProbe:
+            {{ helm_values.readinessProbe | to_nice_yaml(indent=2) | indent(2) }}
+          resources:
+            {{ helm_values.resources | to_nice_yaml(indent=2) | indent(2) }}
+          service:
+            {{ helm_values.service | to_nice_yaml(indent=2) | indent(2) }}
+          ingress:
+            {{ helm_values.ingress | to_nice_yaml(indent=2) | indent(2) }}
+          autoscaling:
+            enabled: false
+            minReplicas: 1
+            maxReplicas: 100
+            targetCPUUtilizationPercentage: 80
+            targetMemoryUtilizationPercentage: 80
+
+          nodeSelector: {}
+          tolerations: []
+          affinity: {}
+          azureKeyVault:
+            secrets:
+            {% for key in secret_keys %}
+            - {{ key }}
+            {% endfor -%}
+            {{ helm_values.azureKeyVault | to_nice_yaml(indent=2) | indent(2) }}
+          appConfig:
+            {{ helm_values.appConfig | to_nice_yaml(indent=2) | indent(2) }}
+          {% endraw %}
+
+    - name: Create build playbook
+      copy:
+        dest: "{{ ansible_dir }}/build_playbook.yaml"
+        content: |
+          {% raw -%}
+          - name: Docker image build controller
+            hosts: all 
+            vars:
+              build_action: "build_only" # Change to "build_and_push" to push the image to ACR
+              docker_compose_file: docker-compose.yaml
+              docker_compose_file_path: "../{{ docker_compose_file }}"
+              docker_container_registry_name: "{{ helm_values.image.repository | regex_replace('^(.+?)\\.azurecr\\.io/(.+)', '\\1') }}"
+              docker_image_name: "{{ helm_values.image.repository }}:{{ helm_values.image.tag }}"
+            roles:
+              - build
+          {% endraw %}
+
+    - name: Create deploy playbook
+      copy:
+        dest: "{{ ansible_dir }}/deploy_playbook.yaml"
+        content: |
+          {% raw -%}
+          - name: Helm deployment controller
+            hosts: all
+            vars:
+              helm_action: "template" # Change to "install" to deploy the chart
+              chart_version: 0.1.0
+              charts_dir: "helm_charts"
+              app_name: "APP_NAME"
+            roles:
+              - deploy
+          {% endraw %}
