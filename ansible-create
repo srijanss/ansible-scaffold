@@ -12,11 +12,12 @@ fi
 
 REPO_URL="https://github.com/srijanss/ansible-scaffold"
 TMP_DIR=$(mktemp -d)
-git clone $REPO_URL $TMP_DIR/ansible-scaffold 
+ANSIBLE_SCAFFOLD_DIR="$TMP_DIR/ansible-scaffold"
+git clone $REPO_URL $ANSIBLE_SCAFFOLD_DIR
 
-cd "$PROJECT_DIR"
-mv $TMP_DIR/ansible-scaffold/create_ansible_playbook.yaml scaffold.yaml
+cd $ANSIBLE_SCAFFOLD_DIR
 echo "Creating Ansible scaffold in: $PROJECT_DIR/$PROJECT_NAME"
-ansible-playbook scaffold.yaml -e ansible_dir="$PROJECT_NAME" 
-rm -rf $TMP_DIR scaffold.yaml
+ansible-playbook create_ansible_playbook.yaml -e ansible_dir="$PROJECT_NAME" 
+cp -r $PROJECT_NAME "$PROJECT_DIR"
+rm -rf $TMP_DIR 
 echo "Ansible scaffold created successfully in: $PROJECT_DIR/$PROJECT_NAME"
