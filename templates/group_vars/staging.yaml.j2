@@ -1,0 +1,81 @@
+{% raw -%}
+helm_chart_version: "{{chart_version}}"
+helm_chart_name: "{{ app_name }}"
+helm_release_name: staging
+helm_app_domain: "YOUR_APP_DOMAIN_NAME" 
+helm_namespace: "{{ app_name }}-staging"
+helm_chart_dir: "{{ charts_dir | default('helm_charts') }}" 
+helm_chart_path: "{{helm_chart_dir}}/{{helm_chart_name}}"
+helm_values_file: "/tmp/{{helm_release_name}}-values.yaml"
+helm_azure_secrets_file: "{{helm_chart_path}}/azure-secrets.staging.yaml"
+helm_manifest_file: "/tmp/{{helm_release_name}}-manifest.yaml"
+helm_tls_secret_name: "{{ helm_app_domain | replace('.', '-') }}-tls"
+helm_key_vault_name: "YOUR_KEY_VAULT_NAME"
+helm_values:
+  replicaCount: 2
+  image:
+    repository: REPOSITORY_NAME
+    pullPolicy: IfNotPresent
+    tag: VERSION_NUMBER
+  podSecurityContext:
+    runAsUser: 1000
+    runAsGroup: 2000
+    fsGroup: 2000
+  securityContext:
+    capabilities:
+    drop:
+      - ALL
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    runAsUser: 1000
+  livenessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  readinessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  resources:
+    limits:
+      cpu: "1"
+      memory: 512Mi
+    requests:
+      cpu: 1m
+      memory: 128Mi
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 8000
+    name: gunicorn
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/server-alias: "www.{{helm_app_domain}}"
+    hosts:
+    - host: "{{helm_app_domain}}"
+      paths:
+      - path: /
+        pathType: Prefix
+    tls:
+    - secretName: "{{helm_tls_secret_name}}"
+      hosts:
+      - "{{helm_app_domain}}"
+      - www.{{helm_app_domain}}
+  azureKeyVault:
+    name: "{{ helm_key_vault_name }}"
+    clientId: YOUR_CLIENT_ID
+    tenantId: YOUR_TENANT_ID
+    secretName: kv-secrets
+    volumeName: secrets-store-inline
+    mountPath: /mnt/secrets-store
+    secretProviderClassName: "{{helm_chart_name}}-kv-sync"
+  appConfig:
+    DEBUG: "False"
+    DJANGO_LOGLEVEL: "info"
+    DEFAULT_CHARSET: "UTF-8"
+    ALLOWED_HOSTS: ".{{helm_app_domain}}"
+    CSRF_TRUSTED_ORIGINS: "https://*.{{helm_app_domain}}"
+{% endraw %}

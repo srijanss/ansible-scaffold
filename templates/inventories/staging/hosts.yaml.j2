@@ -1,0 +1,9 @@
+{% raw -%}
+all:
+  children:
+    staging:
+    hosts:
+      staging_cluster:
+      ansible_connection: local
+      kube_context: "YOUR_STAGING_CLUSTER_NAME"
+{% endraw %}

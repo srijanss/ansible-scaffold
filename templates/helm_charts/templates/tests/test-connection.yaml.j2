@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {% raw -%}"{{ include "{% endraw %}{{app_name}}{% raw -%}.fullname" . }}-test-connection"{% endraw %}
+  labels:
+    {% raw -%}{{- include "{% endraw %}{{app_name}}{% raw -%}.labels" . | nindent 4 }}{% endraw %}
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: curl 
+      image: curlimages/curl:latest  # Use a lightweight curl image
+      command: ['sh', '-c']
+      {% raw -%}
+      args: ['curl -s -H "X-Health-Check: true" {{ include "{% endraw %}{{app_name}}{% raw -%}.serviceName" . }}:{{ .Values.service.port }}/health/ || exit 1']
+      resources:
+        {{- toYaml .Values.resources | nindent 8 }}
+  restartPolicy: Never
+  {%- endraw -%}

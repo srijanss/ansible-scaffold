@@ -1,0 +1,11 @@
+{% raw -%}
+- name: Helm deployment controller
+  hosts: all
+  vars:
+    helm_action: "template" # Change to "install" to deploy the chart
+    chart_version: 0.1.0
+    charts_dir: "helm_charts"
+    app_name: "APP_NAME"
+  roles:
+    - deploy
+{% endraw %}

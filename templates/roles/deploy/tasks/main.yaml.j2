@@ -1,0 +1,112 @@
+{% raw -%}
+- name: Ensure kubectl is installed
+  command: kubectl version --client
+  register: kubectl_check
+  failed_when: kubectl_check.rc != 0
+  changed_when: kubectl_check.rc == 0
+
+- name: Ensure active kube context is set and is equal to {{ kube_context }}
+  command: kubectl config current-context
+  register: kube_context_check
+  changed_when: kube_context_check.stdout != kube_context
+  when: kubectl_check is changed
+
+- name: Use kubectl to set the context to {{ kube_context }}
+  command: kubectl config use-context {{ kube_context }}
+  register: kubectl_context_set
+  failed_when: kubectl_context_set.rc != 0
+  changed_when: kubectl_context_set.rc == 0
+  when: kube_context_check is changed
+
+- name: Ensure Helm is installed
+  command: helm version
+  register: helm_check
+  failed_when: helm_check.rc != 0
+  changed_when: helm_check.rc == 0
+
+- name: Create Helm charts directory
+  file:
+    path: ./{{ helm_chart_dir }}
+    state: directory
+  when: helm_check is changed and helm_action == "create"
+  register: helm_charts_dir
+
+- name: Create Helm chart scaffold (like `helm create`)
+  command: helm create {{helm_chart_path}}
+  register: helm_create
+  args:
+    chdir: "./"
+  when: helm_check is changed and helm_action == "create"
+
+- name: Update Chart.yaml
+  shell: >
+    yq eval '.version = "{{ helm_chart_version }}"' -i {{ helm_chart_path }}/Chart.yaml &&
+    yq eval '.name = "{{ helm_chart_name }}"' -i {{ helm_chart_path }}/Chart.yaml &&
+    yq eval '.appVersion = "{{ helm_values.image.tag }}"' -i {{ helm_chart_path }}/Chart.yaml
+  when: helm_check is changed and helm_action in ["template", "install"]
+  register: helm_chart_update
+  changed_when: helm_chart_update.rc == 0
+  failed_when: helm_chart_update.rc != 0
+
+- name: Download secrets from Azure Key Vault
+  shell: >
+    az keyvault secret list --vault-name {{helm_values.azureKeyVault.name}} --query "[].name" -o tsv > /tmp/secrets.txt
+  when: helm_chart_update is changed and helm_action in ["template", "install"]
+  register: download_azure_secrets
+  changed_when: download_azure_secrets.rc == 0
+  failed_when: download_azure_secrets.rc != 0
+
+- name: Read secrets from file
+  slurp:
+    src: /tmp/secrets.txt
+  register: secret_file
+  when: download_azure_secrets is changed and helm_action in ["template", "install"]
+
+- name: Convert secrets content to list
+  set_fact:
+    secret_keys: "{{ secret_file.content | b64decode | split(\n) | select('match', '.+') | list }}"
+  when: helm_action in ["template", "install"]
+
+- name: Render values.yaml
+  template:
+    src: values.yaml.j2
+    dest: "{{helm_values_file}}"
+  when: helm_action in ["template", "install"]
+
+- name: Generate manifest.yaml using helm template
+  ansible.builtin.command: >
+    helm template {{ helm_release_name }}
+    {{ helm_chart_path }}
+    --namespace {{ helm_namespace }}
+    -f {{ helm_values_file }}
+  register: rendered_output
+  when: helm_action == "template"
+
+- name: Write rendered manifest to file
+  copy:
+    content: "{{ rendered_output.stdout }}"
+    dest: "{{helm_manifest_file}}"
+  when: helm_action == "template"
+
+- name: Install or upgrade Helm release
+  ansible.builtin.command: >
+    helm upgrade --install {{ helm_release_name }}
+    {{ helm_chart_path }}
+    --namespace {{ helm_namespace }}
+    --create-namespace
+    -f {{ helm_values_file }}
+    -f {{ helm_azure_secrets_file }}
+  when: helm_action == "install"
+
+- name: Uninstall Helm release
+  ansible.builtin.command: >
+    helm uninstall {{ helm_release_name }}
+    --namespace {{ helm_namespace }}
+  when: helm_action == "uninstall"
+
+- name: Restart the deployment {{ helm_release_name }}-{{ helm_chart_name }}-deployment
+  ansible.builtin.command: >
+    kubectl rollout restart deployment {{ helm_release_name }}-{{ helm_chart_name }}-deployment
+    --namespace {{ helm_namespace }}
+  when: kubectl_check is changed and helm_action == "restart"
+{% endraw %}

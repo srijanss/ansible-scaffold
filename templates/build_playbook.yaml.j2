@@ -1,0 +1,12 @@
+{% raw -%}
+- name: Docker image build controller
+  hosts: all 
+  vars:
+    build_action: "build_only" # Change to "build_and_push" to push the image to ACR
+    docker_compose_file: docker-compose.yaml
+    docker_compose_file_path: "../{{ docker_compose_file }}"
+    docker_container_registry_name: "{{ helm_values.image.repository | regex_replace('^(.+?)\\.azurecr\\.io/(.+)', '\\1') }}"
+    docker_image_name: "{{ helm_values.image.repository }}:{{ helm_values.image.tag }}"
+  roles:
+    - build
+{% endraw %}

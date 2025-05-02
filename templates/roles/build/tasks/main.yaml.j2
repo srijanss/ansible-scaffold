@@ -1,0 +1,45 @@
+{% raw -%}
+- name: Ensure Docker is installed
+  command: docker --version
+  register: docker_check
+  failed_when: docker_check.rc != 0
+
+- name: Update repository name and tag in docker-compose.yaml
+  shell: >
+    yq eval '.services.app.image = "{{ docker_image_name }}"' -i {{ docker_compose_file_path }}
+  when: docker_image_name is defined
+  register: docker_compose_update
+  args:
+    chdir: "./"
+  failed_when: docker_compose_update.rc != 0
+  changed_when: docker_compose_update.rc == 0
+
+- name: Build Docker image using docker compose build
+  ansible.builtin.command: >
+    docker compose -f {{ docker_compose_file_path }} build
+  args:
+    chdir: "./"
+  register: docker_build
+  when: docker_compose_update is changed
+  failed_when: docker_build.rc != 0
+
+- name: Login to Azure Container Registry
+  command: >
+    az acr login --name {{ docker_container_registry_name }}
+  args:
+    chdir: "./"
+  when: docker_build is changed and build_action == "build_and_push"
+  register: acr_login
+  failed_when: acr_login.rc != 0
+  changed_when: acr_login.rc == 0
+
+- name: Push Docker image to Azure Container Registry using docker compose
+  ansible.builtin.command: >
+    docker compose -f {{ docker_compose_file_path }} push
+  args:
+    chdir: "./"
+  register: docker_push
+  when: acr_login is changed and build_action == "build_and_push"
+  failed_when: docker_push.rc != 0
+  changed_when: docker_push.rc == 0
+{% endraw %}
