@@ -1,0 +1,22 @@
+#!/bin/bash
+
+set -e
+
+PROJECT_DIR=$(pwd)
+PROJECT_NAME=$1
+
+if [ -z "$PROJECT_NAME" ]; then
+  echo "Usage: $0 <project_name>"
+  exit 1
+fi
+
+REPO_URL="https://github.com/srijanss/ansible-scaffold"
+TMP_DIR=$(mktemp -d)
+git clone $REPO_URL $TMP_DIR/ansible-scaffold 
+
+cd "$PROJECT_DIR"
+mv $TMP_DIR/ansible-scaffold/create_ansible_playbook.yaml scaffold.yaml
+echo "Creating Ansible scaffold in: $PROJECT_DIR/$PROJECT_NAME"
+ansible-playbook scaffold.yaml -e ansible_dir="$PROJECT_NAME" 
+rm -rf $TMP_DIR scaffold.yaml
+echo "Ansible scaffold created successfully in: $PROJECT_DIR/$PROJECT_NAME"
