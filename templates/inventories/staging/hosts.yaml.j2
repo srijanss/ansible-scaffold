@@ -5,5 +5,5 @@ all:
       hosts:
         staging_cluster:
           ansible_connection: local
-          kube_context: "{{ staging_cluster }}"
+          kube_context: "{{ helm_cluster_name }}"
 {% endraw %}

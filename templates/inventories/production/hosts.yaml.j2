@@ -5,5 +5,5 @@ all:
       hosts:
         production_cluster:
           ansible_connection: local
-          kube_context: "{{ production_cluster }}"
+          kube_context: "{{ helm_cluster_name }}"
 {% endraw %}
