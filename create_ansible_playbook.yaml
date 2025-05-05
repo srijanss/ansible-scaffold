@@ -75,6 +75,11 @@
         src: templates/deploy_playbook.yaml.j2
         dest: "{{ ansible_dir }}/deploy_playbook.yaml"
 
+    - name: Create build_and_deploy playbook
+      template:
+        src: templates/build_and_deploy.yaml.j2
+        dest: "{{ ansible_dir }}/build_and_deploy.yaml"
+
     - name: Create helm charts directories
       file:
         path: "{{ ansible_dir }}/helm_charts/{{ item }}"

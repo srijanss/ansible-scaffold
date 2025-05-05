@@ -1,0 +1,10 @@
+{% raw -%}
+---
+- import_playbook: build_playbook.yaml
+  vars:
+    build_action: "build_and_push"
+
+- import_playbook: deploy_playbook.yaml
+  vars:
+    helm_action: "install"
+{% endraw %}
