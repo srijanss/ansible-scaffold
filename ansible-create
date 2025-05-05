@@ -2,13 +2,61 @@
 
 set -e
 
+DEFAULT_PROJECT_NAME="ansible-scaffold"
 PROJECT_DIR=$(pwd)
-PROJECT_NAME=$1
+
+# Define options
+OPTIONS=":p:a:h"
+
+# Initialize variables
+PROJECT_NAME=""
+APP_NAME=""
+CREATE_HELM_CHARTS=false
+
+# enclose usage information in a function
+usage() {
+  echo "Usage: $0 [--project-dir <project_name>] [--app-name <app_name>] [--create-helm-charts]"
+  echo "  -p or --project-dir <project_name>   Specify the project name (default: $DEFAULT_PROJECT_NAME)"
+  echo "  -a or --app-name <app_name>          Specify the application name"
+  echo "  -c or --create-helm-charts           Create Helm charts"
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -p|--project-dir)
+      PROJECT_NAME="$2"
+      shift 2
+      ;;
+    -a|--app-name)
+      APP_NAME="$2"
+      shift 2
+      ;;
+    -c|--create-helm-charts)
+      CREATE_HELM_CHARTS=true
+      shift
+      ;;
+    -h|--help)
+      usage 
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $arg"
+      usage 
+      exit 1
+      ;;
+  esac
+done
+
 
 if [ -z "$PROJECT_NAME" ]; then
-  echo "Usage: $0 <project_name>"
-  exit 1
+  echo "Using default project name: $DEFAULT_PROJECT_NAME"
+  PROJECT_NAME=$DEFAULT_PROJECT_NAME
 fi
+
+echo "Ansible directory: $PROJECT_NAME"
+echo "App name: $APP_NAME"
+echo "Create Helm charts: $CREATE_HELM_CHARTS"
+
 
 REPO_URL="https://github.com/srijanss/ansible-scaffold"
 TMP_DIR=$(mktemp -d)
@@ -17,7 +65,19 @@ git clone $REPO_URL $ANSIBLE_SCAFFOLD_DIR
 
 cd $ANSIBLE_SCAFFOLD_DIR
 echo "Creating Ansible scaffold in: $PROJECT_DIR/$PROJECT_NAME"
-ansible-playbook create_ansible_playbook.yaml -e ansible_dir="$PROJECT_NAME" 
+if [ -z "$APP_NAME" ]; then
+  if [ "$CREATE_HELM_CHARTS" = true ]; then
+    ansible-playbook create_ansible_playbook.yaml -e ansible_dir="$PROJECT_NAME" -e action="helm_charts" 
+  else
+    ansible-playbook create_ansible_playbook.yaml -e ansible_dir="$PROJECT_NAME"
+  fi
+else
+  if [ "$CREATE_HELM_CHARTS" = true ]; then
+    ansible-playbook create_ansible_playbook.yaml -e ansible_dir="$PROJECT_NAME"  -e app_name="$APP_NAME" -e action="helm_charts"
+  else
+    ansible-playbook create_ansible_playbook.yaml -e ansible_dir="$PROJECT_NAME"  -e app_name="$APP_NAME"
+  fi
+fi
 cp -r $PROJECT_NAME "$PROJECT_DIR"
 rm -rf $TMP_DIR 
 echo "Ansible scaffold created successfully in: $PROJECT_DIR/$PROJECT_NAME"
