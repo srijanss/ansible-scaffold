@@ -34,9 +34,15 @@ helm_values:
   livenessProbe:
     initialDelaySeconds: 5
     periodSeconds: 10
+    healthCheckPath: /health/
+    healthCheckHeader: X-Health-Check
+    healthCheckHeaderValue: "true"
   readinessProbe:
     initialDelaySeconds: 5
     periodSeconds: 10
+    healthCheckPath: /health/
+    healthCheckHeader: X-Health-Check
+    healthCheckHeaderValue: "true"
   resources:
     limits:
       cpu: "1"
@@ -44,6 +50,9 @@ helm_values:
     requests:
       cpu: 1m
       memory: 128Mi
+  emptyVolumes:
+    - name: tmp-dir
+      mountPath: /tmp
   service:
     type: ClusterIP
     port: 80
@@ -72,6 +81,7 @@ helm_values:
     clientId: YOUR_CLIENT_ID
     tenantId: YOUR_TENANT_ID
     secretName: kv-secrets
+    csiDriver: secrets-store.csi.k8s.io
     volumeName: secrets-store-inline
     mountPath: /mnt/secrets-store
     secretProviderClassName: "{{helm_chart_name}}-kv-sync"

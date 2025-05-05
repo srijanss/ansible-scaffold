@@ -21,6 +21,8 @@ readinessProbe:
   {{ helm_values.readinessProbe | to_nice_yaml(indent=2) | indent(2) }}
 resources:
   {{ helm_values.resources | to_nice_yaml(indent=2) | indent(2) }}
+emptyVolumes:
+  {{ helm_values.emptyVolumes | to_nice_yaml(indent=2) | indent(2) }}
 service:
   {{ helm_values.service | to_nice_yaml(indent=2) | indent(2) }}
 ingress:

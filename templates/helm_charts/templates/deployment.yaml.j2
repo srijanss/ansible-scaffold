@@ -68,20 +68,22 @@ spec:
             - name: {{ .Values.azureKeyVault.volumeName }}
               mountPath: {{ .Values.azureKeyVault.mountPath }}
               readOnly: true
-            - name: tmp-dir
-              mountPath: /tmp
-              readOnly: false
+            {{- range .Values.emptyVolumes }}
+            - name: {{ .name }}
+              mountPath: {{ .mountPath }}
+              readOnly: {{ .readOnly | default false }}
+            {{- end }}
           ports:
             - name: {{ .Values.service.name | default "http" }}
               containerPort: {{ .Values.service.targetPort }}
               protocol: TCP
           livenessProbe:
             httpGet:
-              path: /health/
+              path: {{ .Values.livenessProbe.healthCheckPath | default "/health/" }}
               port: {{ .Values.service.name | default "http" }}
               httpHeaders:
-                - name: X-Health-Check
-                  value: "true"
+                - name: {{ .Values.livenessProbe.healthCheckHeader | default "X-Health-Check" | quote }} 
+                  value: {{ .Values.livenessProbe.healthCheckHeaderValue | default "true" | quote }}
             {{- if .Values.livenessProbe.initialDelaySeconds }}
             initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds | default 5 }}
             {{- end }}
@@ -90,11 +92,11 @@ spec:
             {{- end }}
           readinessProbe:
             httpGet:
-              path: /health/
+              path: {{ .Values.readinessProbe.healthCheckPath | default "/health/" }} 
               port: {{ .Values.service.name | default "http" }}
               httpHeaders:
-                - name: X-Health-Check
-                  value: "true"
+                - name: {{ .Values.readinessProbe.healthCheckHeader | default "X-Health-Check" | quote }} 
+                  value: {{ .Values.readinessProbe.healthCheckHeaderValue | default "true" | quote }}
             {{- if .Values.readinessProbe.initialDelaySeconds }}
             initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds | default 5 }}
             {{- end }}
@@ -106,12 +108,14 @@ spec:
       volumes:
         - name: {{ .Values.azureKeyVault.volumeName }}
           csi:
-            driver: secrets-store.csi.k8s.io
+            driver: {{ .Values.azureKeyVault.csiDriver | default "secrets-store.csi.k8s.io" }} 
             readOnly: true
             volumeAttributes:
               secretProviderClass: {{ include "{% endraw %}{{app_name}}{% raw -%}.secretProviderClassName" . }}
-        - name: tmp-dir
+        {{- range .Values.emptyVolumes }}
+        - name: {{ .name }}
           emptyDir: {}
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
