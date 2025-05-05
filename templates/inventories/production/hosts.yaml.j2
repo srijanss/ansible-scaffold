@@ -2,8 +2,8 @@
 all:
   children:
     production:
-    hosts:
-      production_cluster:
-      ansible_connection: local
-      kube_context: "YOUR_PRODUCTION_CLUSTER_NAME"
+      hosts:
+        production_cluster:
+          ansible_connection: local
+          kube_context: "{{ production_cluster }}"
 {% endraw %}
