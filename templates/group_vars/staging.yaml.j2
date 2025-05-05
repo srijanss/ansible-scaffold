@@ -17,9 +17,9 @@ helm_tls_secret_name: "{{ helm_app_domain | replace('.', '-') }}-tls"
 helm_values:
   replicaCount: 2
   image:
-    repository: {{ helm_image_repository }} 
+    repository: "{{ helm_image_repository }}" 
     pullPolicy: IfNotPresent
-    tag: {{ helm_image_tag }} 
+    tag: "{{ helm_image_tag }}"
   podSecurityContext:
     runAsUser: 1000
     runAsGroup: 2000
