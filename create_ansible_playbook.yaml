@@ -3,6 +3,7 @@
   vars:
     ansible_dir: "ansible-playbook"
     app_name: "my-app"
+    action: "ansible"
 
   tasks:
     - name: Create ansible directory
@@ -83,18 +84,64 @@
         - "{{ app_name }}"
         - "{{ app_name }}/templates"
         - "{{ app_name }}/templates/tests"
+      when: action == "helm_charts"
+
+    - name: Create .helmignore
+      template:
+        src: templates/helm_charts/.helmignore.j2
+        dest: "{{ ansible_dir }}/helm_charts/{{ app_name }}/.helmignore"
+      when: action == "helm_charts"
 
     - name: Create helm Chart.yaml
       template:
         src: templates/helm_charts/Chart.yaml.j2
         dest: "{{ ansible_dir }}/helm_charts/{{ app_name }}/Chart.yaml"
+      when: action == "helm_charts"
 
     - name: Create template test-connection.yaml
       template:
         src: templates/helm_charts/templates/tests/test-connection.yaml.j2
         dest: "{{ ansible_dir }}/helm_charts/{{ app_name }}/templates/tests/test-connection.yaml"
+      when: action == "helm_charts"
 
     - name: Create _helpers.tpl
       template:
         src: templates/helm_charts/templates/_helpers.tpl.j2
         dest: "{{ ansible_dir }}/helm_charts/{{ app_name }}/templates/_helpers.tpl"
+      when: action == "helm_charts"
+
+    - name: Create NOTES.txt
+      template:
+        src: templates/helm_charts/templates/NOTES.txt.j2
+        dest: "{{ ansible_dir }}/helm_charts/{{ app_name }}/templates/NOTES.txt"
+      when: action == "helm_charts"
+
+    - name: Create configmap.yaml
+      template:
+        src: templates/helm_charts/templates/configmap.yaml.j2
+        dest: "{{ ansible_dir }}/helm_charts/{{ app_name }}/templates/configmap.yaml"
+      when: action == "helm_charts"
+
+    - name: Create deployment.yaml
+      template:
+        src: templates/helm_charts/templates/deployment.yaml.j2
+        dest: "{{ ansible_dir }}/helm_charts/{{ app_name }}/templates/deployment.yaml"
+      when: action == "helm_charts"
+
+    - name: Create ingress.yaml
+      template:
+        src: templates/helm_charts/templates/ingress.yaml.j2
+        dest: "{{ ansible_dir }}/helm_charts/{{ app_name }}/templates/ingress.yaml"
+      when: action == "helm_charts"
+
+    - name: Create secretproviderclass.yaml
+      template:
+        src: templates/helm_charts/templates/secretproviderclass.yaml.j2
+        dest: "{{ ansible_dir }}/helm_charts/{{ app_name }}/templates/secretproviderclass.yaml"
+      when: action == "helm_charts"
+
+    - name: Create service.yaml
+      template:
+        src: templates/helm_charts/templates/service.yaml.j2
+        dest: "{{ ansible_dir }}/helm_charts/{{ app_name }}/templates/service.yaml"
+      when: action == "helm_charts"
