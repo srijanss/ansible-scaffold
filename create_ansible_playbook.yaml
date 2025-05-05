@@ -80,6 +80,11 @@
         src: templates/build_and_deploy.yaml.j2
         dest: "{{ ansible_dir }}/build_and_deploy.yaml"
 
+    - name: Create ansible.cfg file
+      template:
+        src: templates/ansible.cfg.j2
+        dest: "{{ ansible_dir }}/ansible.cfg"
+
     - name: Create helm charts directories
       file:
         path: "{{ ansible_dir }}/helm_charts/{{ item }}"
