@@ -1,0 +1,126 @@
+{% raw -%}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "{% endraw %}{{app_name}}{% raw -%}.fullname" . }}-deployment
+  namespace: {{ include "{% endraw %}{{app_name}}{% raw -%}.namespace" . }}
+  labels:
+    {{- include "{% endraw %}{{app_name}}{% raw -%}.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "{% endraw %}{{app_name}}{% raw -%}.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "{% endraw %}{{app_name}}{% raw -%}.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "{% endraw %}{{app_name}}{% raw -%}.serviceAccountName" . }}
+      {{- if .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}-container
+          securityContext:
+            {{- if .Values.securityContext.capabilities.drop }}
+            capabilities:
+              drop:
+                {{- toYaml .Values.securityContext.capabilities.drop | nindent 16 }}
+              {{- if .Values.securityContext.capabilities.add }}
+              add:
+                {{- toYaml .Values.securityContext.capabilities.add | nindent 16 }}
+              {{- end }}
+            {{- end }}
+            {{- if .Values.securityContext.readOnlyRootFilesystem }}
+            readOnlyRootFilesystem: {{ .Values.securityContext.readOnlyRootFilesystem }}
+            {{- end }}
+            {{- if .Values.securityContext.runAsNonRoot }}
+            runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
+            {{- end }}
+            {{- if .Values.securityContext.runAsUser }}
+            runAsUser: {{ .Values.securityContext.runAsUser }}
+            {{- end }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.azureKeyVault.secretName }}
+            - configMapRef:
+                name: {{ include "{% endraw %}{{app_name}}{% raw -%}.configMapName" . }}
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          volumeMounts:
+            - name: {{ .Values.azureKeyVault.volumeName }}
+              mountPath: {{ .Values.azureKeyVault.mountPath }}
+              readOnly: true
+            - name: tmp-dir
+              mountPath: /tmp
+              readOnly: false
+          ports:
+            - name: {{ .Values.service.name | default "http" }}
+              containerPort: {{ .Values.service.targetPort }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health/
+              port: {{ .Values.service.name | default "http" }}
+              httpHeaders:
+                - name: X-Health-Check
+                  value: "true"
+            {{- if .Values.livenessProbe.initialDelaySeconds }}
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds | default 5 }}
+            {{- end }}
+            {{- if .Values.livenessProbe.periodSeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds | default 10 }}
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /health/
+              port: {{ .Values.service.name | default "http" }}
+              httpHeaders:
+                - name: X-Health-Check
+                  value: "true"
+            {{- if .Values.readinessProbe.initialDelaySeconds }}
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds | default 5 }}
+            {{- end }}
+            {{- if .Values.readinessProbe.periodSeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds | default 10 }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: {{ .Values.azureKeyVault.volumeName }}
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: {{ include "{% endraw %}{{app_name}}{% raw -%}.secretProviderClassName" . }}
+        - name: tmp-dir
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}{% endraw %}
