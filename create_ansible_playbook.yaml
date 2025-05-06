@@ -155,3 +155,9 @@
         src: templates/helm_charts/templates/service.yaml.j2
         dest: "{{ ansible_dir }}/helm_charts/{{ app_name }}/templates/service.yaml"
       when: action == "helm_charts"
+
+    - name: Create cronjob.yaml
+      template:
+        src: templates/helm_charts/templates/cronjob.yaml.j2
+        dest: "{{ ansible_dir }}/helm_charts/{{ app_name }}/templates/cronjob.yaml"
+      when: action == "helm_charts"

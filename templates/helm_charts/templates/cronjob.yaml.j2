@@ -1,0 +1,87 @@
+{% raw -%}
+{{- range .Values.cronjobs }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "{% endraw %}{{app_name}}{% raw -%}.fullname" $ }}-{{ .name }}-cronjob
+  namespace: {{ include "{% endraw %}{{app_name}}{% raw -%}.namespace" $ }}
+  labels:
+    {{- include "{% endraw %}{{app_name}}{% raw -%}.labels" $ | nindent 4 }}
+spec:
+  schedule: {{ .schedule | quote }} 
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          {{- with $.Values.podAnnotations }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          labels:
+            {{- include "{% endraw %}{{app_name}}{% raw -%}.selectorLabels" $ | nindent 12 }}
+        spec:
+          {{- with $.Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          serviceAccountName: {{ include "{% endraw %}{{app_name}}{% raw -%}.serviceAccountName" $ }}
+          {{- if $.Values.podSecurityContext }}
+          securityContext:
+            {{- toYaml $.Values.podSecurityContext | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: {{ .name }}-cronjob-container
+              securityContext:
+                {{- if $.Values.securityContext.capabilities.drop }}
+                capabilities:
+                  drop:
+                    {{- toYaml $.Values.securityContext.capabilities.drop | nindent 20 }}
+                  {{- if $.Values.securityContext.capabilities.add }}
+                  add:
+                    {{- toYaml $.Values.securityContext.capabilities.add | nindent 20 }}
+                  {{- end }}
+                {{- end }}
+                {{- if $.Values.securityContext.readOnlyRootFilesystem }}
+                readOnlyRootFilesystem: {{ $.Values.securityContext.readOnlyRootFilesystem }}
+                {{- end }}
+                {{- if $.Values.securityContext.runAsNonRoot }}
+                runAsNonRoot: {{ $.Values.securityContext.runAsNonRoot }}
+                {{- end }}
+                {{- if $.Values.securityContext.runAsUser }}
+                runAsUser: {{ $.Values.securityContext.runAsUser }}
+                {{- end }}
+              image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag | default $.Chart.AppVersion }}"
+              imagePullPolicy: {{ $.Values.image.pullPolicy }}
+              envFrom:
+                - secretRef:
+                    name: {{ $.Values.azureKeyVault.secretName }}
+                - configMapRef:
+                    name: {{ include "{% endraw %}{{app_name}}{% raw -%}.configMapName" $ }}
+              volumeMounts:
+                - name: {{ $.Values.azureKeyVault.volumeName }}
+                  mountPath: {{ $.Values.azureKeyVault.mountPath }}
+                  readOnly: true
+                {{- range $.Values.emptyVolumes }}
+                - name: {{ .name }}
+                  mountPath: {{ .mountPath }}
+                  readOnly: {{ .readOnly | default false }}
+                {{- end }}
+              resources:
+                {{- toYaml $.Values.resources | nindent 16 }}
+              command:
+                {{- toYaml .command | nindent 16 }}
+          volumes:
+            - name: {{ $.Values.azureKeyVault.volumeName }}
+              csi:
+                driver: {{ $.Values.azureKeyVault.csiDriver | default "secrets-store.csi.k8s.io" }} 
+                readOnly: true
+                volumeAttributes:
+                  secretProviderClass: {{ include "{% endraw %}{{app_name}}{% raw -%}.secretProviderClassName" $ }}
+            {{- range $.Values.emptyVolumes }}
+            - name: {{ .name }}
+              emptyDir: {}
+            {{- end }}
+          restartPolicy: OnFailure
+{{- end }}
+{% endraw %}

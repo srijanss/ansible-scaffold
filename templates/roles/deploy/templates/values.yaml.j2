@@ -45,4 +45,13 @@ azureKeyVault:
   {{ helm_values.azureKeyVault | to_nice_yaml(indent=2) | indent(2) }}
 appConfig:
   {{ helm_values.appConfig | to_nice_yaml(indent=2) | indent(2) }}
+{% if helm_values.cronjobs is defined and helm_values.cronjobs | length > 0 %}
+cronjobs:
+  {%- for cronjob in helm_values.cronjobs %} 
+  - name: {{ cronjob.name }}
+    schedule: {{ cronjob.schedule }}
+    command:
+      {{ cronjob.command | to_nice_yaml(indent=4) | indent(6) -}}
+  {% endfor -%}
+{% endif %}
 {% endraw %}
