@@ -109,4 +109,9 @@
     kubectl rollout restart deployment {{ helm_release_name }}-{{ helm_chart_name }}-deployment
     --namespace {{ helm_namespace }}
   when: kubectl_check is changed and helm_action == "restart"
+
+- name: Delete zombie pods in all namespaces in the cluster {{ helm_cluster_name }}
+  shell: >
+    kubectl get pods --all-namespaces --field-selector=status.phase!=Running -o json | jq -r '.items[] | "kubectl delete pod \(.metadata.name) -n \(.metadata.namespace)"' | bash
+  when: helm_action == "delete_zombie_pods"
 {% endraw %}
