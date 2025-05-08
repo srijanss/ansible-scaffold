@@ -21,6 +21,11 @@
         src: templates/group_vars/staging.yaml.j2
         dest: "{{ ansible_dir }}/group_vars/staging.yaml"
 
+    - name: Create production.yaml inside group_vars
+      template:
+        src: templates/group_vars/production.yaml.j2
+        dest: "{{ ansible_dir }}/group_vars/production.yaml"
+
     - name: Create inventories directories
       file:
         path: "{{ ansible_dir }}/inventories/{{ item }}"
