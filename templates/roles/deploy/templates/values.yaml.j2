@@ -49,7 +49,7 @@ appConfig:
 cronjobs:
   {%- for cronjob in helm_values.cronjobs %} 
   - name: {{ cronjob.name }}
-    schedule: {{ cronjob.schedule }}
+    schedule: {{ cronjob.schedule | quote }}
     command:
       {{ cronjob.command | to_nice_yaml(indent=4) | indent(6) -}}
   {% endfor -%}
