@@ -174,3 +174,5 @@ cython_debug/
 
 # Visual Studio Code workspace settings
 **code-workspace**
+
+**/.DS_Store
