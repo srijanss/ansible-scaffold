@@ -28,16 +28,18 @@ helm_values:
     capabilities:
       drop:
         - ALL
-    readOnlyRootFilesystem: true
+    readOnlyRootFilesystem: false
     runAsNonRoot: true
     runAsUser: 1000
   livenessProbe:
+    enabled: true
     initialDelaySeconds: 5
     periodSeconds: 10
     healthCheckPath: /health/
     healthCheckHeader: X-Health-Check
     healthCheckHeaderValue: "true"
   readinessProbe:
+    enabled: true
     initialDelaySeconds: 5
     periodSeconds: 10
     healthCheckPath: /health/
