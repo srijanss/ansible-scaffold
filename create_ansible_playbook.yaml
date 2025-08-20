@@ -70,6 +70,11 @@
         src: templates/roles/deploy/templates/values.yaml.j2
         dest: "{{ ansible_dir }}/roles/deploy/templates/values.yaml.j2"
 
+    - name: Create azure secrets template
+      template:
+        src: templates/roles/deploy/templates/azure-secrets.yaml.j2
+        dest: "{{ ansible_dir }}/roles/deploy/templates/azure-secrets.yaml.j2"
+
     - name: Create build playbook
       template:
         src: templates/build_playbook.yaml.j2
