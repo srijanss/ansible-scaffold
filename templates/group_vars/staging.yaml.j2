@@ -11,7 +11,7 @@ helm_namespace: "{% endraw %}{{ app_name }}{% raw -%}-staging"
 helm_chart_dir: "{{ charts_dir | default('helm_charts') }}" 
 helm_chart_path: "{{helm_chart_dir}}/{{helm_chart_name}}"
 helm_values_file: "/tmp/{{helm_release_name}}-values.yaml"
-helm_azure_secrets_file: "{{helm_chart_path}}/azure-secrets.staging.yaml"
+helm_azure_secrets_file: "/tmp/azure-secrets.{{helm_release_name}}.yaml"
 helm_manifest_file: "/tmp/{{helm_release_name}}-manifest.yaml"
 helm_tls_secret_name: "{{ helm_app_domain | replace('.', '-') }}-tls"
 helm_values:
@@ -80,8 +80,8 @@ helm_values:
           - www.{{helm_app_domain}}
   azureKeyVault:
     name: "{{ helm_key_vault_name }}"
-    clientId: YOUR_CLIENT_ID
-    tenantId: YOUR_TENANT_ID
+    clientId: YOUR_CLIENT_ID  # Managed Identity Client ID env var key name
+    tenantId: YOUR_TENANT_ID # Azure Tenant ID env var key name
     secretName: kv-secrets
     csiDriver: secrets-store.csi.k8s.io
     volumeName: secrets-store-inline

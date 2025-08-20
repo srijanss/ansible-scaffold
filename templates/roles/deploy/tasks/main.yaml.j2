@@ -88,6 +88,20 @@
     dest: "{{helm_manifest_file}}"
   when: helm_action == "template"
 
+- name: Check if azure secrets env variables are set in shell environment
+  ansible.builtin.assert:
+    that:
+      - lookup('env', helm_values.azureKeyVault.clientId) | length > 0
+      - lookup('env', helm_values.azureKeyVault.tenantId) | length > 0
+    fail_msg: "Azure Key Vault clientId {{ helm_values.azureKeyVault.clientId }} and tenantId {{ helm_values.azureKeyVault.tenantId }} must be set in shell environment variables."
+  when: helm_action in ["template", "install"]
+
+- name: Create Azure secrets file
+  template:
+    src: azure-secrets.yaml.j2
+    dest: "{{ helm_azure_secrets_file }}"
+  when: helm_action in ["template", "install"]
+
 - name: Install or upgrade Helm release
   ansible.builtin.command: >
     helm upgrade --install {{ helm_release_name }}
